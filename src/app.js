@@ -29,11 +29,12 @@
     cal: 1, time: 480, budget: prefs.budget || 30,
     cats: prefs.cats || [true, true, false],
     xfer: prefs.xfer || 1, ops: prefs.ops || 'all', walk: prefs.walk !== false, lang: prefs.lang || 'ja',
+    theme: ['light', 'dark'].includes(prefs.theme) ? prefs.theme : 'auto',
   };
   function savePrefs() {
     try {
       const o = state.origin >= 0 ? net.stations[groupInfo[state.origin].stations[0]].id : null;
-      localStorage.setItem('tokyo-reach', JSON.stringify({ origin: o, budget: state.budget, cats: state.cats, xfer: state.xfer, ops: state.ops, walk: state.walk, lang: state.lang }));
+      localStorage.setItem('tokyo-reach', JSON.stringify({ origin: o, budget: state.budget, cats: state.cats, xfer: state.xfer, ops: state.ops, walk: state.walk, lang: state.lang, theme: state.theme }));
     } catch (e) { /* storage unavailable */ }
   }
 
@@ -752,6 +753,8 @@
     $('#ops').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; state.ops = b.dataset.v; renderMore(); runSoon(); savePrefs(); });
     $('#lang').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; state.lang = b.dataset.v; widthCache.clear(); renderAll(); run(); savePrefs(); });
     $('#walk').onclick = () => { state.walk = !state.walk; renderMore(); updateWalk(); savePrefs(); };
+    $('#theme').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setTheme(b.dataset.v); });
+    $('#themeBtn').onclick = () => setTheme(THEME_NEXT[state.theme]);
 
     // results list
     $('#far').addEventListener('click', e => { const li = e.target.closest('li[data-g]'); if (li) selectDest(+li.dataset.g, true); });
@@ -775,7 +778,7 @@
     }
     side.hidden = !wide;
   }
-  function renderAll() { renderOrigin(); renderWhen(); renderBudget(); renderTypes(); renderMore(); }
+  function renderAll() { renderOrigin(); renderWhen(); renderBudget(); renderTypes(); renderMore(); renderTheme(); }
 
   function setOrigin(g, fly) {
     state.origin = g; state.dest = -1;
@@ -848,6 +851,29 @@
     for (const b of $('#lang').children) b.setAttribute('aria-pressed', String(b.dataset.v === state.lang));
     $('#walk').setAttribute('aria-checked', String(state.walk));
   }
+
+  // ------------------------------------------------------------ light / dark
+  const THEME_ICON = {
+    auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg>',
+    light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>',
+    dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+  };
+  const THEME_NAME = { auto: '跟随系统', light: '浅色', dark: '深色' };
+  const THEME_NEXT = { auto: 'light', light: 'dark', dark: 'auto' };
+  function applyTheme() {
+    const root = document.documentElement, host = window.__hostTheme;
+    if (state.theme === 'auto') { if (host) root.setAttribute('data-theme', host); else root.removeAttribute('data-theme'); }
+    else root.setAttribute('data-theme', state.theme);
+    renderTheme();
+  }
+  function renderTheme() {
+    for (const b of $('#theme').children) b.setAttribute('aria-pressed', String(b.dataset.v === state.theme));
+    const btn = $('#themeBtn');
+    btn.innerHTML = THEME_ICON[state.theme];
+    btn.setAttribute('aria-label', `外观：${THEME_NAME[state.theme]}，点击切换为${THEME_NAME[THEME_NEXT[state.theme]]}`);
+    btn.title = `外观：${THEME_NAME[state.theme]}`;
+  }
+  function setTheme(t) { state.theme = t; applyTheme(); savePrefs(); }
 
   function renderPeek(list) {
     const cal = { 1: '工作日', 2: '周六', 4: '周日' }[state.cal];

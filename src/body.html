@@ -1,3 +1,14 @@
+<script>
+  // Apply the saved light/dark choice before anything paints.
+  (function () {
+    var root = document.documentElement;
+    window.__hostTheme = root.getAttribute('data-theme');
+    try {
+      var t = (JSON.parse(localStorage.getItem('tokyo-reach') || '{}') || {}).theme;
+      if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t);
+    } catch (e) { /* storage unavailable */ }
+  })();
+</script>
 <div id="app">
   <div id="map" role="region" aria-label="东京圈铁路地图"></div>
   <canvas id="labels" aria-hidden="true"></canvas>
@@ -7,6 +18,7 @@
     <header class="brand">
       <h1>Tokyo <span>Reach</span></h1>
       <small>東京 等時圏</small>
+      <button class="iconbtn theme" id="themeBtn" type="button" aria-label="切换明暗"></button>
     </header>
     <button class="peek" id="peek" type="button" aria-label="展开设置">
       <span class="pk-a"><b id="pkName">—</b><span id="pkWhen"></span></span>
@@ -67,7 +79,7 @@
         <div class="types" id="types">
           <button class="tog" data-i="0" aria-pressed="true"><i class="box"></i><b>普通・各停</b><span>每站都停</span></button>
           <button class="tog" data-i="1" aria-pressed="true"><i class="box"></i><b>快速・急行</b><span>不另收费</span></button>
-          <button class="tog" data-i="2" aria-pressed="false"><i class="box"></i><b>付费特急</b><span>特急・Liner 等</span></button>
+          <button class="tog" data-i="2" aria-pressed="false"><i class="box"></i><b>付费特急</b><span>需特急券</span></button>
         </div>
       </section>
 
@@ -86,6 +98,10 @@
             <div class="row"><span>站名</span>
               <div class="seg" id="lang" role="group" aria-label="站名语言">
                 <button data-v="ja" aria-pressed="true">日本語</button><button data-v="zh">中文</button><button data-v="en">EN</button>
+              </div></div>
+            <div class="row"><span>外观</span>
+              <div class="seg" id="theme" role="group" aria-label="明暗主题">
+                <button data-v="auto" aria-pressed="true">跟随系统</button><button data-v="light">浅色</button><button data-v="dark">深色</button>
               </div></div>
             <div class="row"><span>步行范围</span>
               <button class="switch" id="walk" role="switch" aria-checked="true" aria-label="显示出站后步行可达范围"></button></div>

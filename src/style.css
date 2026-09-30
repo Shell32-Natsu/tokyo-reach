@@ -148,6 +148,8 @@ button { cursor: pointer; }
 .brand h1 { margin: 0; font: 600 22px/1 var(--f-num); letter-spacing: .02em; text-transform: uppercase; }
 .brand h1 span { color: var(--ink-3); font-weight: 500; }
 .brand small { font: 400 12px/1 var(--f-sta); color: var(--ink-3); letter-spacing: .12em; }
+.brand .theme { margin-left: auto; align-self: center; width: 32px; height: 32px; }
+.brand .theme svg { width: 18px; height: 18px; }
 
 .block { padding: 14px 0; border-top: 1px solid var(--rule); display: grid; gap: 10px; }
 .block:first-child { border-top: 0; padding-top: 4px; }

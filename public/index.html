@@ -159,6 +159,8 @@ button { cursor: pointer; }
 .brand h1 { margin: 0; font: 600 22px/1 var(--f-num); letter-spacing: .02em; text-transform: uppercase; }
 .brand h1 span { color: var(--ink-3); font-weight: 500; }
 .brand small { font: 400 12px/1 var(--f-sta); color: var(--ink-3); letter-spacing: .12em; }
+.brand .theme { margin-left: auto; align-self: center; width: 32px; height: 32px; }
+.brand .theme svg { width: 18px; height: 18px; }
 
 .block { padding: 14px 0; border-top: 1px solid var(--rule); display: grid; gap: 10px; }
 .block:first-child { border-top: 0; padding-top: 4px; }
@@ -352,6 +354,17 @@ details.more .inner { display: grid; gap: 12px; padding-top: 12px; }
 </style>
 </head>
 <body>
+<script>
+  // Apply the saved light/dark choice before anything paints.
+  (function () {
+    var root = document.documentElement;
+    window.__hostTheme = root.getAttribute('data-theme');
+    try {
+      var t = (JSON.parse(localStorage.getItem('tokyo-reach') || '{}') || {}).theme;
+      if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t);
+    } catch (e) { /* storage unavailable */ }
+  })();
+</script>
 <div id="app">
   <div id="map" role="region" aria-label="东京圈铁路地图"></div>
   <canvas id="labels" aria-hidden="true"></canvas>
@@ -361,6 +374,7 @@ details.more .inner { display: grid; gap: 12px; padding-top: 12px; }
     <header class="brand">
       <h1>Tokyo <span>Reach</span></h1>
       <small>東京 等時圏</small>
+      <button class="iconbtn theme" id="themeBtn" type="button" aria-label="切换明暗"></button>
     </header>
     <button class="peek" id="peek" type="button" aria-label="展开设置">
       <span class="pk-a"><b id="pkName">—</b><span id="pkWhen"></span></span>
@@ -421,7 +435,7 @@ details.more .inner { display: grid; gap: 12px; padding-top: 12px; }
         <div class="types" id="types">
           <button class="tog" data-i="0" aria-pressed="true"><i class="box"></i><b>普通・各停</b><span>每站都停</span></button>
           <button class="tog" data-i="1" aria-pressed="true"><i class="box"></i><b>快速・急行</b><span>不另收费</span></button>
-          <button class="tog" data-i="2" aria-pressed="false"><i class="box"></i><b>付费特急</b><span>特急・Liner 等</span></button>
+          <button class="tog" data-i="2" aria-pressed="false"><i class="box"></i><b>付费特急</b><span>需特急券</span></button>
         </div>
       </section>
 
@@ -440,6 +454,10 @@ details.more .inner { display: grid; gap: 12px; padding-top: 12px; }
             <div class="row"><span>站名</span>
               <div class="seg" id="lang" role="group" aria-label="站名语言">
                 <button data-v="ja" aria-pressed="true">日本語</button><button data-v="zh">中文</button><button data-v="en">EN</button>
+              </div></div>
+            <div class="row"><span>外观</span>
+              <div class="seg" id="theme" role="group" aria-label="明暗主题">
+                <button data-v="auto" aria-pressed="true">跟随系统</button><button data-v="light">浅色</button><button data-v="dark">深色</button>
               </div></div>
             <div class="row"><span>步行范围</span>
               <button class="switch" id="walk" role="switch" aria-checked="true" aria-label="显示出站后步行可达范围"></button></div>
@@ -880,11 +898,12 @@ details.more .inner { display: grid; gap: 12px; padding-top: 12px; }
     cal: 1, time: 480, budget: prefs.budget || 30,
     cats: prefs.cats || [true, true, false],
     xfer: prefs.xfer || 1, ops: prefs.ops || 'all', walk: prefs.walk !== false, lang: prefs.lang || 'ja',
+    theme: ['light', 'dark'].includes(prefs.theme) ? prefs.theme : 'auto',
   };
   function savePrefs() {
     try {
       const o = state.origin >= 0 ? net.stations[groupInfo[state.origin].stations[0]].id : null;
-      localStorage.setItem('tokyo-reach', JSON.stringify({ origin: o, budget: state.budget, cats: state.cats, xfer: state.xfer, ops: state.ops, walk: state.walk, lang: state.lang }));
+      localStorage.setItem('tokyo-reach', JSON.stringify({ origin: o, budget: state.budget, cats: state.cats, xfer: state.xfer, ops: state.ops, walk: state.walk, lang: state.lang, theme: state.theme }));
     } catch (e) { /* storage unavailable */ }
   }
 
@@ -1603,6 +1622,8 @@ details.more .inner { display: grid; gap: 12px; padding-top: 12px; }
     $('#ops').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; state.ops = b.dataset.v; renderMore(); runSoon(); savePrefs(); });
     $('#lang').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; state.lang = b.dataset.v; widthCache.clear(); renderAll(); run(); savePrefs(); });
     $('#walk').onclick = () => { state.walk = !state.walk; renderMore(); updateWalk(); savePrefs(); };
+    $('#theme').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setTheme(b.dataset.v); });
+    $('#themeBtn').onclick = () => setTheme(THEME_NEXT[state.theme]);
 
     // results list
     $('#far').addEventListener('click', e => { const li = e.target.closest('li[data-g]'); if (li) selectDest(+li.dataset.g, true); });
@@ -1626,7 +1647,7 @@ details.more .inner { display: grid; gap: 12px; padding-top: 12px; }
     }
     side.hidden = !wide;
   }
-  function renderAll() { renderOrigin(); renderWhen(); renderBudget(); renderTypes(); renderMore(); }
+  function renderAll() { renderOrigin(); renderWhen(); renderBudget(); renderTypes(); renderMore(); renderTheme(); }
 
   function setOrigin(g, fly) {
     state.origin = g; state.dest = -1;
@@ -1699,6 +1720,29 @@ details.more .inner { display: grid; gap: 12px; padding-top: 12px; }
     for (const b of $('#lang').children) b.setAttribute('aria-pressed', String(b.dataset.v === state.lang));
     $('#walk').setAttribute('aria-checked', String(state.walk));
   }
+
+  // ------------------------------------------------------------ light / dark
+  const THEME_ICON = {
+    auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/></svg>',
+    light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>',
+    dark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+  };
+  const THEME_NAME = { auto: '跟随系统', light: '浅色', dark: '深色' };
+  const THEME_NEXT = { auto: 'light', light: 'dark', dark: 'auto' };
+  function applyTheme() {
+    const root = document.documentElement, host = window.__hostTheme;
+    if (state.theme === 'auto') { if (host) root.setAttribute('data-theme', host); else root.removeAttribute('data-theme'); }
+    else root.setAttribute('data-theme', state.theme);
+    renderTheme();
+  }
+  function renderTheme() {
+    for (const b of $('#theme').children) b.setAttribute('aria-pressed', String(b.dataset.v === state.theme));
+    const btn = $('#themeBtn');
+    btn.innerHTML = THEME_ICON[state.theme];
+    btn.setAttribute('aria-label', `外观：${THEME_NAME[state.theme]}，点击切换为${THEME_NAME[THEME_NEXT[state.theme]]}`);
+    btn.title = `外观：${THEME_NAME[state.theme]}`;
+  }
+  function setTheme(t) { state.theme = t; applyTheme(); savePrefs(); }
 
   function renderPeek(list) {
     const cal = { 1: '工作日', 2: '周六', 4: '周日' }[state.cal];
