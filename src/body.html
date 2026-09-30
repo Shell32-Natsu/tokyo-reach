@@ -1,0 +1,128 @@
+<div id="app">
+  <div id="map" role="region" aria-label="东京圈铁路地图"></div>
+  <canvas id="labels" aria-hidden="true"></canvas>
+
+  <aside id="panel" aria-label="设置与结果">
+    <div class="handle" aria-hidden="true"></div>
+    <header class="brand">
+      <h1>Tokyo <span>Reach</span></h1>
+      <small>東京 等時圏</small>
+    </header>
+    <button class="peek" id="peek" type="button" aria-label="展开设置">
+      <span class="pk-a"><b id="pkName">—</b><span id="pkWhen"></span></span>
+      <span class="pk-b" id="pkStat"></span>
+    </button>
+    <div class="scroll">
+      <section class="block">
+        <div class="label">出发站</div>
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="搜索车站：新宿 / 涩谷 / shibuya" aria-label="搜索车站" aria-controls="suggest">
+          <ul id="suggest" class="suggest" role="listbox" hidden></ul>
+        </div>
+        <div id="originCard"></div>
+      </section>
+
+      <section class="block">
+        <div class="label">出发时间 <em>东京时间</em></div>
+        <div class="seg" id="cal" role="group" aria-label="时刻表类型">
+          <button data-v="1" aria-pressed="true">工作日</button>
+          <button data-v="2" aria-pressed="false">周六</button>
+          <button data-v="4" aria-pressed="false">周日·节假日</button>
+        </div>
+        <div class="readout">
+          <div class="big" id="timeVal" aria-live="polite">08:00</div>
+          <span class="nextday" id="nextday" hidden>次日</span>
+          <span class="spacer"></span>
+          <button class="iconbtn" id="tminus" aria-label="提前 5 分钟">−5</button>
+          <button class="iconbtn" id="tplus" aria-label="推后 5 分钟">+5</button>
+          <button class="textbtn" id="tnow">现在</button>
+        </div>
+        <div>
+          <input type="range" id="timeRange" min="240" max="1500" step="1" value="480" aria-label="出发时间">
+          <div class="ticks abs" aria-hidden="true">
+            <span style="left:0%">4</span><span style="left:19.05%">8</span><span style="left:38.1%">12</span><span style="left:57.14%">16</span><span style="left:76.19%">20</span><span style="left:95.24%">24</span>
+          </div>
+        </div>
+        <div class="sens" id="sens">
+          <div class="label">提前或推迟出发，最远能到多远 <em id="sensMax">计算中…</em></div>
+          <svg id="sensSvg" height="46" role="img" aria-label="前后一小时内每分钟出发时最远能到的直线距离"></svg>
+          <div class="ticks abs" id="sensTicks"></div>
+          <div class="tip" id="sensTip" hidden></div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="label">时间预算 <em>含候车和换乘</em></div>
+        <div class="readout"><div class="big" id="budgetVal">30<small>分钟</small></div></div>
+        <input type="range" id="budgetRange" min="5" max="120" step="1" value="30" aria-label="时间预算（分钟）">
+        <div class="presets" id="presets">
+          <button data-v="15">15</button><button data-v="20">20</button><button data-v="30">30</button>
+          <button data-v="45">45</button><button data-v="60">60</button><button data-v="90">90</button>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="label">可乘坐的车型</div>
+        <div class="types" id="types">
+          <button class="tog" data-i="0" aria-pressed="true"><i class="box"></i><b>普通・各停</b><span>每站都停</span></button>
+          <button class="tog" data-i="1" aria-pressed="true"><i class="box"></i><b>快速・急行</b><span>不另收费</span></button>
+          <button class="tog" data-i="2" aria-pressed="false"><i class="box"></i><b>付费特急</b><span>特急・Liner 等</span></button>
+        </div>
+      </section>
+
+      <section class="block">
+        <details class="more">
+          <summary>更多选项</summary>
+          <div class="inner">
+            <div class="row"><span>换乘节奏</span>
+              <div class="seg" id="xfer" role="group" aria-label="换乘节奏">
+                <button data-v="1.5">从容</button><button data-v="1" aria-pressed="true">标准</button><button data-v="0.7">赶时间</button>
+              </div></div>
+            <div class="row"><span>运营商</span>
+              <div class="seg" id="ops" role="group" aria-label="运营商">
+                <button data-v="all" aria-pressed="true">全部</button><button data-v="jr">仅 JR</button><button data-v="subway">仅地铁</button>
+              </div></div>
+            <div class="row"><span>站名</span>
+              <div class="seg" id="lang" role="group" aria-label="站名语言">
+                <button data-v="ja" aria-pressed="true">日本語</button><button data-v="zh">中文</button><button data-v="en">EN</button>
+              </div></div>
+            <div class="row"><span>步行范围</span>
+              <button class="switch" id="walk" role="switch" aria-checked="true" aria-label="显示出站后步行可达范围"></button></div>
+          </div>
+        </details>
+      </section>
+
+      <section class="block" id="results">
+        <div class="summary" id="summary"></div>
+        <div class="ramp" aria-label="到达所需分钟">
+          <div class="bar"></div>
+          <div class="ticks abs" id="rampTicks"></div>
+        </div>
+        <div class="label" id="farTitle">最远的车站</div>
+        <ol class="far" id="far"></ol>
+      </section>
+
+      <section class="block" id="journey" hidden>
+        <button class="back" id="back">‹ 返回列表</button>
+        <div id="journeyBody"></div>
+      </section>
+
+      <footer class="credit">
+        时刻表与线路形状来自 <a href="https://github.com/nagix/mini-tokyo-3d" target="_blank" rel="noopener">Mini Tokyo 3D</a> 的公开数据（源自公共交通开放数据中心 ODPT 等，2026-09-28 版），海岸线与行政区划来自国土数值信息 N03。换乘步行时间按站台间距离估算。结果仅供规划参考，出行前请以各铁路公司的公告为准。
+      </footer>
+    </div>
+  </aside>
+
+  <aside id="side" class="side" aria-label="结果" hidden><div class="scroll" id="sideScroll"></div></aside>
+
+  <div class="zoom"><button id="zin" aria-label="放大">+</button><button id="zout" aria-label="缩小">−</button></div>
+
+  <div id="loading" role="status">
+    <div class="box">
+      <div class="title">Tokyo <span>Reach</span></div>
+      <div class="meter"><i></i></div>
+      <p>正在加载…</p>
+    </div>
+  </div>
+</div>
