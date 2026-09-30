@@ -17,7 +17,13 @@ python3 -m http.server 8000
 # 浏览器打开 http://localhost:8000
 ```
 
-也可以把 `public/` 整个目录放到任意静态托管（GitHub Pages、Cloudflare Pages 等）。
+也可以把 `public/` 整个目录放到任意静态托管。
+
+## 部署到 GitHub Pages
+
+仓库里的 `.github/workflows/pages.yml` 会在每次推送到 `main` 时自动部署：先用 `tools/bundle.py` 从 `src/` 重新生成 `public/index.html`，跑一遍算法测试，然后把 `public/` 发布出去。
+
+第一次需要在仓库 **Settings → Pages → Build and deployment → Source** 选 **GitHub Actions**。之后网址是 `https://<用户名>.github.io/tokyo-reach/`。
 
 ## 目录结构
 
