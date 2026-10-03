@@ -5,7 +5,7 @@ set -euo pipefail
 DIR="${1:-mini-tokyo-3d}"
 [ -d "$DIR" ] || git clone --depth 1 https://github.com/nagix/mini-tokyo-3d.git "$DIR"
 cd "$DIR"
-npm install --no-audit --no-fund --ignore-scripts
+if [ -f package-lock.json ]; then npm ci --no-audit --no-fund --ignore-scripts; else npm install --no-audit --no-fund --ignore-scripts; fi
 # The station loader fetches Wikipedia thumbnails we don't need; skip that step.
 python3 - <<'PY'
 p = 'src/loader/stations.js'

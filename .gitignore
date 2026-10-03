@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 *.zip
 .DS_Store
+_mt3d/

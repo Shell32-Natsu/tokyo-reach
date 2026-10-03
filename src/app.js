@@ -2,7 +2,7 @@
  * and MapLibre GL (window.maplibregl). */
 (function () {
   'use strict';
-  const { Network, decodeBase, decodeGeo, haversine, INF } = window.Reach;
+  const { Network, decodeBase, decodeGeo, haversine, INF, dayType } = window.Reach;
   const $ = (s, el = document) => el.querySelector(s);
   const DATA = 'data/';
   const EXT = window.TR_DATA_EXT || '.bin'; // '.txt' = base64 text (for hosts that only serve text)
@@ -12,15 +12,6 @@
   const WALK = 80;    // metres per minute
   const WALK_CAP = 15;
 
-  // Japanese national holidays + year-end (railways run holiday timetables).
-  const HOLIDAYS = new Set([
-    '2026-01-01', '2026-01-02', '2026-01-03', '2026-01-12', '2026-02-11', '2026-02-23', '2026-03-20', '2026-04-29',
-    '2026-05-03', '2026-05-04', '2026-05-05', '2026-05-06', '2026-07-20', '2026-08-11', '2026-09-21', '2026-09-22',
-    '2026-09-23', '2026-10-12', '2026-11-03', '2026-11-23', '2026-12-30', '2026-12-31',
-    '2027-01-01', '2027-01-02', '2027-01-03', '2027-01-11', '2027-02-11', '2027-02-23', '2027-03-21', '2027-03-22',
-    '2027-04-29', '2027-05-03', '2027-05-04', '2027-05-05', '2027-07-19', '2027-08-11', '2027-09-20', '2027-09-23',
-    '2027-10-11', '2027-11-03', '2027-11-23', '2027-12-30', '2027-12-31',
-  ]);
 
   // ------------------------------------------------------------ state
   const prefs = (() => { try { return JSON.parse(localStorage.getItem('tokyo-reach') || '{}'); } catch (e) { return {}; } })();
@@ -80,8 +71,8 @@
     let date = new Date(Date.UTC(+p.year, +p.month - 1, +p.day));
     let minutes = (+p.hour % 24) * 60 + +p.minute;
     if (+p.hour < 3) { date = new Date(date.getTime() - 864e5); minutes += 1440; }
-    const iso = date.toISOString().slice(0, 10), dow = date.getUTCDay();
-    const cal = HOLIDAYS.has(iso) || dow === 0 ? 4 : dow === 6 ? 2 : 1;
+    const iso = date.toISOString().slice(0, 10);
+    const cal = dayType(iso);
     return { minutes, cal, iso };
   }
 
@@ -140,6 +131,7 @@
     status.textContent = '正在建立索引…';
     await new Promise(r => setTimeout(r, 20));
     net = JSON.parse(new TextDecoder().decode(netBytes));
+    if (net.source) $('#dataVer').textContent = `，数据快照 ${net.source.date}`;
     nw = new Network(net, ttBytes);
     base = decodeBase(baseBytes);
     buildGroups();

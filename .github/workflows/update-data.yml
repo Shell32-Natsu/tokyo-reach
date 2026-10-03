@@ -1,0 +1,98 @@
+name: Update timetable data
+
+# Once a day, check whether Mini Tokyo 3D has new timetables or line shapes.
+# If it does: rebuild public/data, run the checks, commit, and redeploy Pages.
+# If the checks fail nothing is committed and the site keeps the old data.
+on:
+  schedule:
+    - cron: '23 19 * * *'   # 04:23 JST every day
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild even if upstream data has not changed
+        type: boolean
+        default: false
+      allow_shrink:
+        description: Accept a build with far fewer trains than before
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # commit the new data
+  actions: write    # start the Pages deploy
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch Mini Tokyo 3D
+        # full commit history (for the data date) but only today's file contents
+        run: git clone --quiet --filter=blob:none https://github.com/nagix/mini-tokyo-3d.git _mt3d
+
+      - name: Compare with the data we built last time
+        id: check
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          new=$(python3 tools/build_data.py --key _mt3d)
+          old=$(python3 -c "import json; print(json.load(open('public/data/source.json'))['key'])" 2>/dev/null || true)
+          echo "upstream inputs: $new   ours: ${old:-none}"
+          if [ "$new" = "$old" ] && [ "$FORCE" != "true" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Upstream timetable and line data unchanged since our last build ($(jq -r .date public/data/source.json)). Nothing to do." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "before=$(jq -r '"\(.date) · \(.trips) trips · \(.stations) stations"' public/data/source.json 2>/dev/null)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v7
+        if: steps.check.outputs.changed == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: _mt3d/package-lock.json
+
+      - name: Build line geometry
+        if: steps.check.outputs.changed == 'true'
+        run: tools/build_mt3d_features.sh _mt3d
+
+      - name: Build timetables and network
+        if: steps.check.outputs.changed == 'true'
+        env:
+          ALLOW_SHRINK: ${{ inputs.allow_shrink && '1' || '' }}
+        run: python3 tools/build_data.py _mt3d
+
+      - name: Check the new data
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          python3 tools/bundle.py
+          node test/engine.test.js
+
+      - name: Commit and redeploy
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ steps.check.outputs.before }}
+        run: |
+          after=$(jq -r '"\(.date) · \(.trips) trips · \(.stations) stations"' public/data/source.json)
+          if git diff --quiet -- public/data; then
+            echo "Rebuilt, but the output is identical to what is deployed." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/data
+          git commit -q -m "Update timetable data to Mini Tokyo 3D $(jq -r .date public/data/source.json)" \
+                     -m "Before: ${BEFORE:-none}" -m "After:  $after"
+          git pull -q --rebase origin main
+          git push -q origin HEAD:main
+          # a push made with GITHUB_TOKEN does not start other workflows; start the deploy explicitly
+          gh workflow run pages.yml --ref main
+          printf 'Data updated and deploy started.\n\n- Before: %s\n- After: %s\n' "${BEFORE:-none}" "$after" >> "$GITHUB_STEP_SUMMARY"

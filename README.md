@@ -43,24 +43,36 @@ test/engine.test.js       命令行下的算法测试
 public/                   可直接部署的成品（index.html + data/）
 ```
 
-## 更新数据
+## 自动更新数据
 
-时刻表来自 [Mini Tokyo 3D](https://github.com/nagix/mini-tokyo-3d) 仓库的 `data/`（作者会随各公司改点更新）。更新步骤：
+`.github/workflows/update-data.yml` 每天东京时间 04:23 自动运行：
+
+1. 拉取最新的 [Mini Tokyo 3D](https://github.com/nagix/mini-tokyo-3d)，只比较我们实际用到的文件（时刻表、线路、车站、线路形状、生成线路形状的代码）。没有变化就直接结束，大约半分钟。
+2. 有变化就重新生成 `public/data/`，并跑 `test/engine.test.js` 检查：车次和车站数量、几条主要线路是否都有车次、几条已知路线是否还能算出来、节假日判断是否正确。
+3. 新数据的车次如果比旧数据少了 15% 以上，构建会直接停止，以免上游数据残缺时把网站弄坏。确认是上游确实删减了线路的话，可以手动运行并勾选 “Accept a build with far fewer trains”。
+4. 检查都通过后提交 `public/data/`，再触发 GitHub Pages 部署。任何一步失败都不会提交，网站继续用旧数据，GitHub 会发邮件通知。
+
+页面底部会显示当前数据的快照日期（取自 `public/data/source.json`）。
+
+想立刻更新：Actions → Update timetable data → Run workflow。勾选 “Rebuild even if upstream data has not changed” 可以强制重新生成。
+
+公开仓库如果 60 天没有任何提交，GitHub 会暂停定时任务（会先发邮件提醒），到 Actions 页面点一下 Enable 就能恢复。
+
+## 手动更新数据
 
 ```bash
-# 1. 线路几何（需要 Node 18+）
-tools/build_mt3d_features.sh /path/to/mini-tokyo-3d
+git clone --filter=blob:none https://github.com/nagix/mini-tokyo-3d.git _mt3d
+tools/build_mt3d_features.sh _mt3d     # 线路几何（需要 Node 18+）
+python3 tools/build_data.py _mt3d      # 时刻表、车站、线路形状
+python3 tools/bundle.py                # 重新打包页面
+node test/engine.test.js               # 检查
+```
 
-# 2. 时刻表、车站、线路形状
-python3 tools/build_data.py /path/to/mini-tokyo-3d
+底图（海岸线、行政区划）基本不会变，需要重做时：
 
-# 3. 底图（只在需要时重做；需要 shapely 和 mapshaper）
+```bash
 git clone --depth 1 https://github.com/niiyz/JapanCityGeoJson.git
-python3 tools/build_basemap.py JapanCityGeoJson
-
-# 4. 重新打包页面
-python3 tools/bundle.py
-node test/engine.test.js   # 可选：检查几条已知路线
+python3 tools/build_basemap.py JapanCityGeoJson   # 需要 shapely 和 mapshaper
 ```
 
 ## 算法说明
@@ -69,7 +81,7 @@ node test/engine.test.js   # 可选：检查几条已知路线
 - 换乘时间：同一站同一线路换车 1 分钟；同一车站建筑内不同线路至少 2 分钟；需要出站走到另一个车站至少 4 分钟；再按站台间直线距离以每分钟 70 米加算，上限 20 分钟。“换乘节奏”选项会整体乘上 1.5 / 1 / 0.7。
 - 直通运行（例如副都心线直通东急东横线）在数据里是首尾相接的两个车次，程序把它们当作同一次乘车处理，不计换乘。
 - 时刻表只有分钟精度；时刻早于 03:00 的视为前一天的深夜。
-- 节假日表内置了 2026–2027 年日本法定节假日和年末年始（12/30–1/3），用来自动选择“工作日 / 周六 / 周日·节假日”时刻表。
+- “现在”按钮会按东京日期自动选择“工作日 / 周六 / 周日·节假日”时刻表。日本法定节假日（含振替休日、国民の休日）按现行法律计算，年末年始 12/30–1/3 也按节假日时刻表处理。
 
 ## 数据来源与授权
 

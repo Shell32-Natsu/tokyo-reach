@@ -360,5 +360,34 @@
     }
   }
 
-  root.Reach = { Reader, decodeBase, decodeGeo, Network, haversine, INF };
+  // ------------------------------------------------------------ calendar
+  // Which timetable runs on a date: 1 weekday, 2 Saturday, 4 Sunday/holiday.
+  // Japanese public holidays are computed (current law, valid 2020–2099),
+  // plus 12/30–1/3, when railways run their holiday timetables.
+  const holidayCache = new Map();
+  function japanHolidays(y) {
+    if (holidayCache.has(y)) return holidayCache.get(y);
+    const day = (m, d) => Date.UTC(y, m - 1, d) / 864e5;   // days since 1970-01-01 (a Thursday)
+    const dow = n => (n + 4) % 7;
+    const monday = (m, nth) => { const d1 = day(m, 1); return d1 + (8 - dow(d1)) % 7 + (nth - 1) * 7; };
+    const k = y - 1980, q = Math.floor(k / 4);
+    const base = [day(1, 1), monday(1, 2), day(2, 11), day(2, 23), day(3, Math.floor(20.8431 + 0.242194 * k - q)),
+      day(4, 29), day(5, 3), day(5, 4), day(5, 5), monday(7, 3), day(8, 11), monday(9, 3),
+      day(9, Math.floor(23.2488 + 0.242194 * k - q)), monday(10, 2), day(11, 3), day(11, 23)].sort((a, b) => a - b);
+    const set = new Set(base);
+    // 国民の休日: a weekday squeezed between two holidays
+    for (const n of base) if (set.has(n + 2) && !set.has(n + 1) && dow(n + 1) !== 0) set.add(n + 1);
+    // 振替休日: a holiday on Sunday moves to the next non-holiday
+    for (const n of base) if (dow(n) === 0) { let m = n + 1; while (set.has(m)) m++; set.add(m); }
+    for (const [m, d] of [[1, 2], [1, 3], [12, 30], [12, 31]]) set.add(day(m, d));
+    holidayCache.set(y, set);
+    return set;
+  }
+  function dayType(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    const n = Date.UTC(y, m - 1, d) / 864e5, w = (n + 4) % 7;
+    return japanHolidays(y).has(n) || w === 0 ? 4 : w === 6 ? 2 : 1;
+  }
+
+  root.Reach = { Reader, decodeBase, decodeGeo, Network, haversine, INF, japanHolidays, dayType };
 })(typeof window !== 'undefined' ? window : globalThis);

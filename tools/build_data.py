@@ -7,13 +7,21 @@ Output: public/data/net.bin         railways, stations, groups, train types
         public/data/geo13..16.bin   railway sections + snapped station points
                                      for four display zoom levels
 
+        public/data/source.json     which Mini Tokyo 3D snapshot this came from
+
 Usage : python3 tools/build_data.py <mini-tokyo-3d dir>
+        python3 tools/build_data.py --key <mini-tokyo-3d dir>   print the input key only
+
+If the new timetable has far fewer trips than the one it replaces, the build
+stops without writing anything (set ALLOW_SHRINK=1 to accept it anyway).
 """
 import glob
 import gzip
+import hashlib
 import json
 import math
 import os
+import subprocess
 import sys
 from collections import defaultdict
 
@@ -22,6 +30,48 @@ from common import Writer  # noqa: E402
 
 OUT = os.path.join(os.path.dirname(__file__), '..', 'public', 'data')
 ZOOMS = [13, 14, 15, 16]
+
+# Everything in the Mini Tokyo 3D checkout that our output depends on. A
+# change anywhere else upstream (rendering code, translations) needs no rebuild.
+INPUTS = [
+    'data/train-timetables', 'data/railways.json', 'data/stations.json',
+    'data/station-groups.json', 'data/coordinates.json', 'data/train-types.json',
+    'data/rail-directions.json', 'src/loader',
+]
+SHRINK_LIMIT = 0.85
+
+
+def git(mt3d, *args):
+    return subprocess.run(['git', '-C', mt3d, *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def source_info(mt3d):
+    """Identify the upstream snapshot by the git hashes of the inputs we use."""
+    trees = [git(mt3d, 'rev-parse', f'HEAD:{p}') for p in INPUTS]
+    key = hashlib.sha1('\n'.join(trees).encode()).hexdigest()[:16]
+    commit = git(mt3d, 'rev-parse', 'HEAD')
+    # date of the last upstream commit that touched the inputs (needs history;
+    # in a shallow clone this falls back to the checked-out commit's date)
+    date = git(mt3d, 'log', '-1', '--format=%cs', 'HEAD', '--', *INPUTS) or git(mt3d, 'log', '-1', '--format=%cs')
+    return {'key': key, 'commit': commit, 'date': date}
+
+
+def previous_trip_count():
+    path = os.path.join(OUT, 'tt.bin')
+    if not os.path.exists(path):
+        return 0
+    with open(path, 'rb') as f:
+        b = gzip.decompress(f.read())
+    if b[:4] != b'TRIP':
+        return 0
+    v, shift, p = 0, 0, 4
+    while True:
+        x = b[p]
+        v |= (x & 0x7F) << shift
+        p += 1
+        shift += 7
+        if not x & 0x80:
+            return v
 
 # Operator display names (ja, zh-Hans, en)
 OPERATORS = {
@@ -123,6 +173,7 @@ def minutes(hhmm):
 
 
 def main(mt3d):
+    source = source_info(mt3d)
     D = os.path.join(mt3d, 'data')
     railways = load(os.path.join(D, 'railways.json'))
     stations = load(os.path.join(D, 'stations.json'))
@@ -171,6 +222,12 @@ def main(mt3d):
                 continue
             trips.append((t, cal))
     trip_index = {t['id']: i for i, (t, _) in enumerate(trips)}
+
+    old = previous_trip_count()
+    if old and len(trips) < old * SHRINK_LIMIT and os.environ.get('ALLOW_SHRINK') != '1':
+        sys.exit(f'Refusing to build: {len(trips)} trips vs {old} before '
+                 f'(more than {100 - SHRINK_LIMIT * 100:.0f}% fewer). '
+                 'Check the upstream data, or rerun with ALLOW_SHRINK=1.')
 
     w = Writer()
     w.buf += b'TRIP'
@@ -272,6 +329,7 @@ def main(mt3d):
         return rid.split('.')[0]
 
     net = {
+        'source': {'date': source['date'], 'commit': source['commit'][:7]},
         'operators': {k: list(v) for k, v in OPERATORS.items()},
         'railways': [{
             'id': r['id'], 'op': op_of(r['id']),
@@ -302,6 +360,16 @@ def main(mt3d):
     os.remove(os.path.join(OUT, 'net.json'))
     print(f'net.json.gz: {len(raw)/1e3:.0f} kB raw, {len(groups)} groups')
 
+    # written last, so it only exists for a build that finished
+    with open(os.path.join(OUT, 'source.json'), 'w') as f:
+        json.dump({**source, 'trips': len(trips), 'stops': n_stops,
+                   'railways': len(railways), 'stations': len(stations)}, f, indent=2)
+        f.write('\n')
+    print(f"source: Mini Tokyo 3D {source['commit'][:7]} ({source['date']}), key {source['key']}")
+
 
 if __name__ == '__main__':
-    main(sys.argv[1])
+    if sys.argv[1] == '--key':
+        print(source_info(sys.argv[2])['key'])
+    else:
+        main(sys.argv[1])
